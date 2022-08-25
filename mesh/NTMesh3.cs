@@ -39,6 +39,7 @@ namespace g3
         DVector<int> triangles;
         DVector<int> triangle_edges;
 		DVector<int> triangle_groups;
+        DVector<int> material_groups;
 
         RefCountVector edges_refcount;
         DVector<int> edges;
@@ -48,6 +49,7 @@ namespace g3
         int shape_timestamp = 0;
 
         int max_group_id = 0;
+        int max_material_group_id = 0;
 
 
         public NTMesh3(bool bWantNormals = true, bool bWantColors = false, bool bWantTriGroups = false)
@@ -78,6 +80,8 @@ namespace g3
             if (bWantTriGroups)
                 triangle_groups = new DVector<int>();
             max_group_id = 0;
+            material_groups = new DVector<int>();
+            max_material_group_id = 0;
 
             edges = new DVector<int>();
             edges_refcount = new RefCountVector();
@@ -105,6 +109,8 @@ namespace g3
             if (copy.triangle_groups != null)
                 triangle_groups = new DVector<int>(copy.triangle_groups);
             max_group_id = copy.max_group_id;
+            material_groups = new DVector<int>(copy.material_groups);
+            max_material_group_id = copy.max_group_id;
 
             edges = new DVector<int>(copy.edges);
             edges_refcount = new RefCountVector(copy.edges_refcount);
@@ -341,7 +347,20 @@ namespace g3
             }
         }
 
+        // Added support for material groups -sHTiF
+        public int GetMaterialGroup(int tID) { 
+            return (material_groups == null) ? -1 
+                : ( triangles_refcount.isValid(tID) ? material_groups[tID] : 0 );
+        }
 
+        public void SetMaterialGroup(int tid, int group_id) {
+            if ( material_groups != null ) {
+                debug_check_is_triangle(tid);
+                material_groups[tid] = group_id;
+                max_material_group_id = Math.Max(max_material_group_id, group_id+1);
+                updateTimeStamp(false);
+            }
+        }
 
         public int GetTriangleGroup(int tID) { 
 			return (triangle_groups == null) ? -1 
@@ -526,7 +545,7 @@ namespace g3
         public int AppendTriangle(int v0, int v1, int v2, int gid = -1) {
             return AppendTriangle(new Index3i(v0, v1, v2), gid);
         }
-        public int AppendTriangle(Index3i tv, int gid = -1) {
+        public int AppendTriangle(Index3i tv, int gid = -1, int mid = -1) {
             if (IsVertex(tv[0]) == false || IsVertex(tv[1]) == false || IsVertex(tv[2]) == false) {
                 Util.gDevAssert(false);
                 return InvalidID;
@@ -549,8 +568,10 @@ namespace g3
             triangles.insert(tv[0], i);
             if (triangle_groups != null) {
                 triangle_groups.insert(gid, tid);
-                max_group_id = Math.Max(max_group_id, gid+1);
+                max_group_id = Math.Max(max_group_id, gid + 1);
             }
+            material_groups.insert(mid, tid);
+            max_material_group_id = Math.Max(max_group_id, mid + 1);
 
             // increment ref counts and update/create edges
             vertices_refcount.increment(tv[0]);

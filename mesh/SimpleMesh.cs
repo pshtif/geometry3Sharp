@@ -15,6 +15,7 @@ namespace g3
 
         public DVector<int> Triangles;
         public DVector<int> FaceGroups;
+        public DVector<int> MaterialGroups;
 
         int timestamp = 0;
 
@@ -68,10 +69,11 @@ namespace g3
             UVs = (bWantUVs) ? new DVector<float>() : null;
             Triangles = new DVector<int>();
             FaceGroups = (bWantFaceGroups) ? new DVector<int>() : null;
+            MaterialGroups = new DVector<int>();
         }
 
         public void Initialize(VectorArray3d v, VectorArray3i t, 
-            VectorArray3f n = null, VectorArray3f c = null, VectorArray2f uv = null, int[] g = null)
+            VectorArray3f n = null, VectorArray3f c = null, VectorArray2f uv = null, int[] g = null, int[] m = null)
         {
             Vertices = new DVector<double>(v);
             Triangles = new DVector<int>(t);
@@ -85,6 +87,9 @@ namespace g3
                 UVs = new DVector<float>(uv);
             if (g != null)
                 FaceGroups = new DVector<int>(g);
+
+            if (g != null)
+                MaterialGroups = new DVector<int>(m);
         }
 
 
@@ -177,18 +182,19 @@ namespace g3
 
 
 
-        public int AppendTriangle(int i, int j, int k, int g = -1)
+        public int AppendTriangle(int i, int j, int k, int g = -1, int m = 0)
         {
             int ti = Triangles.Length / 3;
             if (HasTriangleGroups)
                 FaceGroups.Add((g == -1) ? 0 : g);
             Triangles.Add(i); Triangles.Add(j); Triangles.Add(k);
+            MaterialGroups.Add(m);
             updateTimeStamp();
             return ti;
         }
 
 
-        public void AppendTriangles(int[] vTriangles, int[] vertexMap, int g = -1)
+        public void AppendTriangles(int[] vTriangles, int[] vertexMap, int g = -1, int m = 0)
         {
             for (int ti = 0; ti < vTriangles.Length; ++ti) {
                 Triangles.Add(vertexMap[vTriangles[ti]]);
@@ -197,10 +203,14 @@ namespace g3
                 for (int ti = 0; ti < vTriangles.Length / 3; ++ti)
                     FaceGroups.Add((g == -1) ? 0 : g);
             }
+            
+            for (int ti = 0; ti < vTriangles.Length / 3; ++ti)
+                FaceGroups.Add(m);
+            
             updateTimeStamp();
         }
 
-        public void AppendTriangles(IndexArray3i t, int[] groups = null)
+        public void AppendTriangles(IndexArray3i t, int[] groups = null, int[] materials = null)
         {
             Triangles.Add(t.array);
             if (HasTriangleGroups) {
@@ -209,6 +219,10 @@ namespace g3
                 else
                     FaceGroups.Add(0, t.Count);
             }
+
+            if (materials != null)
+                MaterialGroups.Add(materials);
+            
             updateTimeStamp();
         }
 
@@ -346,7 +360,12 @@ namespace g3
         {
             return FaceGroups[i];
         }
-
+        
+        // Added support for material groups -sHTiF
+        public int GetMaterialGroup(int i)
+        {
+            return MaterialGroups[i];
+        }
 
         public IEnumerable<Vector3d> VerticesItr() {
             int N = VertexCount;
