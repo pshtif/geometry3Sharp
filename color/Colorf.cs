@@ -258,6 +258,12 @@ namespace g3
             Colorb cb = c.ToBytes();
             return new Color32(cb.r, cb.g, cb.b, cb.a);
         }
+
+        // Added for Vector4 conversion sHTiF
+        public static implicit operator Vector4(Colorf c)
+        {
+            return new Vector4(c.r, c.g, c.b, c.a);
+        }
 #endif
 
     }
