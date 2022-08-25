@@ -145,7 +145,8 @@ namespace g3
             for (int j = 0; j < 3; ++j) {
                 int vid = tv[j];
                 vertices_refcount.decrement(vid);
-                if ( bRemoveIsolatedVertices && vertices_refcount.refCount(vid) == 1) {
+                if ( bRemoveIsolatedVertices && vertices_refcount.refCount(vid) == 1) 
+				{
                     vertices_refcount.decrement(vid);
                     Debug.Assert(vertices_refcount.isValid(vid) == false);
                     vertex_edges.Clear(vid);
@@ -156,12 +157,47 @@ namespace g3
             return MeshResult.Ok;
         }
 
+        // Remove edge - sHTiF
+        public bool RemoveEdge(int p_eid)
+        {
+            if (edges[4 * p_eid + 2] == InvalidID) {
+                int a = edges[4 * p_eid];
+                vertex_edges.Remove(a, p_eid);
+
+                int b = edges[4 * p_eid + 1];
+                vertex_edges.Remove(b, p_eid);
+
+                edges_refcount.decrement(p_eid);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool IsValidEdge(int p_eid)
+        {
+            return edges[4 * p_eid + 2] != InvalidID;
+        }
+
+		public int CleanupUnusedVertices()
+        {
+			int removed = 0;
+            foreach (var vid in VertexIndices())
+            {
+				if (vertices_refcount.refCount(vid) == 1)
+				{
+					vertices_refcount.decrement(vid);
+					Debug.Assert(vertices_refcount.isValid(vid) == false);
+					vertex_edges.Clear(vid);
+					removed++;
+				}
+			}
+			return removed;
+        }
 
 
-
-
-
-        public virtual MeshResult SetTriangle(int tID, Index3i newv, bool bRemoveIsolatedVertices = true)
+        public virtual MeshResult SetTriangle(int tID, Index3i newv, bool bRemoveIsolatedVertices = true, bool bRemoveIsolatedEdges = true)
         {
             Index3i tv = GetTriangle(tID);
             Index3i te = GetTriEdges(tID);
@@ -204,7 +240,7 @@ namespace g3
                 if (eid == -1)      // we don't need to modify this edge
                     continue;
                 replace_edge_triangle(eid, tID, InvalidID);
-                if (edges[4 * eid + 2] == InvalidID) {
+                if (edges[4 * eid + 2] == InvalidID && bRemoveIsolatedEdges) {
                     int a = edges[4 * eid];
                     vertex_edges.Remove(a, eid);
 
