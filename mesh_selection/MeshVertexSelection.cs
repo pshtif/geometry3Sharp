@@ -296,6 +296,68 @@ namespace g3
             }
         }
 
+        /**
+         *  Calculate center of selection
+         *  sHTiF
+         */
+        public Vector3d CalculateCenter()
+        {
+            Vector3d v = Vector3d.Zero;
+            
+            foreach (int vid in Selected)
+            {
+                v += Mesh.GetVertex(vid);
+            }
 
+            v /= Selected.Count;
+
+            return v;
+        }
+
+        /**
+         * Translate selection
+         * sHTiF
+         */
+        public void Translate(Vector3d p_position)
+        {
+            foreach (int vid in Selected)
+            {
+                Vector3d v = Mesh.GetVertex(vid);
+                v += p_position;
+                Mesh.SetVertex(vid, v);
+            }
+        }
+
+        /**
+         * Rotate selection
+         * sHTiF
+         */
+        public void Rotate(Vector3d p_origin, Quaterniond p_rotation)
+        {
+            foreach (int vid in Selected)
+            {
+                Vector3d v = Mesh.GetVertex(vid);
+                v -= p_origin;
+                v = (Vector3d)(p_rotation * (Vector3f)v);
+                v += p_origin;
+                Mesh.SetVertex(vid, v);
+            }
+        }
+
+        /**
+         * Scale selection
+         * sHTiF
+         */
+        public void Scale(Vector3d p_scale, Vector3d p_origin)
+        {
+            foreach (int vid in Selected)
+            {
+                Vector3d v = Mesh.GetVertex(vid);
+                v.x -= p_origin.x; v.y -= p_origin.y; v.z -= p_origin.z;
+                v.x *= p_scale.x; v.y *= p_scale.y; v.z *= p_scale.z;
+                v.x += p_origin.x; v.y += p_origin.y; v.z += p_origin.z;
+                Mesh.SetVertex(vid, v);
+            }
+        }
     }
 }
