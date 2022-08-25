@@ -62,7 +62,7 @@ namespace gs
 		}
 
 
-		public bool Apply()
+		public bool Apply(bool p_recomputeNormals)
 		{
 			bool do_checks = false;
 
@@ -192,7 +192,10 @@ namespace gs
              * Might as well compact output mesh...
              */
 			Mesh = new DMesh3(Mesh, true);
-            MeshNormals.QuickCompute(Mesh);
+			if (p_recomputeNormals)
+			{
+				MeshNormals.QuickCompute(Mesh);
+			}
 
 			return true;
 		}
