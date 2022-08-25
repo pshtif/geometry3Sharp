@@ -9,23 +9,24 @@ namespace g3
     {
 
         [Conditional("DEBUG")]
-        public void debug_check_is_vertex(int v) {
+        public void debug_check_is_vertex(int v)
+        {
             if (!IsVertex(v))
-                throw new Exception("DMesh3.debug_is_vertex - not a vertex!");
+                throw new Exception("DMesh3.debug_is_vertex - not a vertex! vid: " + v);
         }
 
         [Conditional("DEBUG")]
         public void debug_check_is_triangle(int t)
         {
             if (!IsTriangle(t))
-                throw new Exception("DMesh3.debug_is_triangle - not a triangle!");
+                throw new Exception("DMesh3.debug_is_triangle - not a triangle! tid: " + t);
         }
 
         [Conditional("DEBUG")]
         public void debug_check_is_edge(int e)
         {
             if (!IsEdge(e))
-                throw new Exception("DMesh3.debug_is_edge - not an edge!");
+                throw new Exception("DMesh3.debug_is_edge - not an edge! eid: " + e);
         }
 
         public void debug_print_vertex(int v) {
@@ -60,7 +61,7 @@ namespace g3
             b.AppendFormat("Triangles count {0} max {1} {2}", TriangleCount, MaxTriangleID, triangles_refcount.UsageStats); b.AppendLine();
             b.AppendFormat("Edges     count {0} max {1} {2}", EdgeCount, MaxEdgeID, edges_refcount.UsageStats); b.AppendLine();
             b.AppendFormat("Normals {0}  Colors {1}  UVs {2}  Groups {3}", HasVertexNormals, HasVertexColors, HasVertexUVs, HasTriangleGroups); b.AppendLine();
-            b.AppendFormat("Closed {0} Compact {1} timestamp {2} shape_timestamp {3}  MaxGroupID {4}", CachedIsClosed, IsCompact, timestamp, shape_timestamp, max_group_id); b.AppendLine();
+            b.AppendFormat("Closed {0} Compact {1} timestamp {2} shape_timestamp {3}  MaxGroupID {4}", CachedIsClosed, IsCompact, timestamp, shape_timestamp, max_triangle_group_id); b.AppendLine();
             b.AppendFormat("VertexEdges " + vertex_edges.MemoryUsage); b.AppendLine();
             return b.ToString();
         }
