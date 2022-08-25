@@ -61,22 +61,52 @@ namespace g3
         }
 
 
+        /// <summary>
+        /// Removes the opposite triangles of <see cref="RemoveContained()"/> 
+        /// </summary>
+        public void RemoveExternal()
+        {
+            Remove(TriangleRemoval.external);
+        }
+        
+
         public void RemoveContained()
+        {
+            Remove();
+        }
+
+        private enum TriangleRemoval
+        {
+            contained,
+            external
+        }
+
+        private void Remove(TriangleRemoval rem = TriangleRemoval.contained)
         {
             DMeshAABBTree3 spatial = new DMeshAABBTree3(CutMesh, true);
             spatial.WindingNumber(Vector3d.Zero);
             SafeListBuilder<int> removeT = new SafeListBuilder<int>();
-            gParallel.ForEach(Target.TriangleIndices(), (tid) => {
+            gParallel.ForEach(Target.TriangleIndices(), (tid) =>
+            {
                 Vector3d v = Target.GetTriCentroid(tid);
                 if (spatial.WindingNumber(v) > 0.9)
                     removeT.SafeAdd(tid);
             });
-            MeshEditor.RemoveTriangles(Target, removeT.Result);
+            if (rem == TriangleRemoval.contained)
+            {
+                MeshEditor.RemoveTriangles(Target, removeT.Result);
+            }
+            else if (rem == TriangleRemoval.external)
+            {
+                var ext = Target.TriangleIndices().Except(removeT.Result);
+                MeshEditor.RemoveTriangles(Target, ext);
+            }
 
             // [RMS] construct set of on-cut vertices? This is not
             // necessarily all boundary vertices...
             CutVertices = new List<int>();
-            foreach (int vid in SegmentInsertVertices) {
+            foreach (int vid in SegmentInsertVertices)
+            {
                 if (Target.IsVertex(vid))
                     CutVertices.Add(vid);
             }
@@ -584,7 +614,7 @@ namespace g3
                 return false;
             // TODO need to check if we need to save edge AB to connect vertices!
             throw new Exception("not done yet!");
-            return true;
+            //return true;
         }
 
 
