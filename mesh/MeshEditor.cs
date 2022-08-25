@@ -226,6 +226,8 @@ namespace g3
         /// adding triangulated quads between each edge pair. 
         /// If bAbortOnFailure==true and a failure is encountered during stitching, the triangles added up to that point are removed.
         /// If bAbortOnFailure==false, failures are ignored and the returned triangle list may contain invalid values!
+        ///
+        /// Added support for isolated edges stiching - sHTiF
         /// </summary>
         public virtual int[] StitchUnorderedEdges(List<Index2i> EdgePairs, int group_id, bool bAbortOnFailure, out bool stitch_incomplete)
         {
@@ -247,9 +249,13 @@ namespace g3
                     if (bAbortOnFailure) goto operation_failed;
                     else { stitch_incomplete = true; continue; }
                 }
-                Index3i edge_a_tri = Mesh.GetTriangle(edge_a.c);
+                
                 int a = edge_a.a, b = edge_a.b;
-                IndexUtil.orient_tri_edge(ref a, ref b, edge_a_tri);
+                if (Mesh.IsTriangle(edge_a.c))
+                {
+                    Index3i edge_a_tri = Mesh.GetTriangle(edge_a.c);
+                    IndexUtil.orient_tri_edge(ref a, ref b, edge_a_tri);
+                }
 
                 // look up and orient the second edge
                 Index4i edge_b = Mesh.GetEdge(edges.b);
@@ -257,20 +263,48 @@ namespace g3
                     if (bAbortOnFailure) goto operation_failed;
                     else { stitch_incomplete = true; continue; }
                 }
-                Index3i edge_b_tri = Mesh.GetTriangle(edge_b.c);
-                int c = edge_b.a, d = edge_b.b;
-                IndexUtil.orient_tri_edge(ref c, ref d, edge_b_tri);
 
-                // swap second edge (right? should this be a parameter?)
+                int c = edge_b.a, d = edge_b.b;
+                if (Mesh.IsTriangle(edge_b.c))
+                {
+                    Index3i edge_b_tri = Mesh.GetTriangle(edge_b.c);
+                    IndexUtil.orient_tri_edge(ref c, ref d, edge_b_tri);
+                }
+                
+                if (!Mesh.IsTriangle(edge_a.c))
+                {
+                    if (c == edge_b.a)
+                    {
+                        a = edge_a.b;
+                        b = edge_a.a;
+                    }
+                }
+                
                 int tmp = c; c = d; d = tmp;
 
                 Index3i t1 = new Index3i(b, a, d);
+                int tid1 = Mesh.AppendTriangle(t1, group_id);
+                
                 Index3i t2 = new Index3i(a, c, d);
 
-                int tid1 = Mesh.AppendTriangle(t1, group_id);
+                // Fix for strange cases - sHTiF
+                var e = Mesh.find_edge(d, a);
+                if (e != DMesh3.InvalidID && Mesh.IsBoundaryEdge(e) == false)
+                {
+                    Mesh.RemoveTriangle(tid1, false);
+                    t1 = new Index3i(a, b, d);
+                    tid1 = Mesh.AppendTriangle(t1, group_id);
+                    t2 = new Index3i(b, c, d);
+                }
+                
                 int tid2 = Mesh.AppendTriangle(t2, group_id);
 
                 if (tid1 < 0 || tid2 < 0) {
+                    if (tid1 == DMesh3.NonManifoldID || tid2 == DMesh3.NonManifoldID)
+                    {
+                        UnityEngine.Debug.Log("Triangles aborted due to NonManifold Geo");
+                    }
+
                     if (bAbortOnFailure) goto operation_failed;
                     else { stitch_incomplete = true; continue; }
                 }
@@ -482,13 +516,17 @@ namespace g3
             }
 
             // duplicate vertices on edges that are on boundary of triangles roi
-            foreach ( int tid in triangles ) {
+            foreach ( int tid in triangles )
+            {
                 Index3i te = Mesh.GetTriEdges(tid);
 
                 for ( int j = 0; j < 3; ++j ) {
                     Index2i et = Mesh.GetEdgeT(te[j]);
                     // [TODO] what about behavior where we want to also duplicate boundary verts??
-                    if (et.b == DMesh3.InvalidID ||  (et.a == tid && in_set.Contains(et.b)) || (et.b == tid && in_set.Contains(et.a)))
+                    // if (et.b == DMesh3.InvalidID ||  (et.a == tid && in_set.Contains(et.b)) || (et.b == tid && in_set.Contains(et.a)))
+                    //     te[j] = -1;
+                    // Added support for boundary edges - sHTiF
+                    if ((et.a == tid && in_set.Contains(et.b)) || (et.b == tid && in_set.Contains(et.a)))
                         te[j] = -1;
                 }
 
@@ -519,7 +557,7 @@ namespace g3
                         tv_new[j] = newv;
                 }
                 if ( tv_new != tv ) {
-                    Mesh.SetTriangle(tid, tv_new);
+                    Mesh.SetTriangle(tid, tv_new, false, false);
                 }
             }
 
@@ -798,7 +836,8 @@ namespace g3
                 int gid = appendMesh.GetTriangleGroup(tid);
                 if (appendGID >= 0)
                     gid = appendGID;
-                Mesh.AppendTriangle(t, gid);
+                int mid = appendMesh.GetMaterialGroup(tid);
+                Mesh.AppendTriangle(t, gid, mid);
             }
 
             return true;
