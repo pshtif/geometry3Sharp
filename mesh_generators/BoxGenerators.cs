@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Debug = UnityEngine.Debug;
 
 namespace g3
 {
@@ -107,6 +108,7 @@ namespace g3
                             double tx = (double)xi / (double)(N - 1);
                             normals[vi] = faceN;
                             uv[vi] = new Vector2f(tx, ty);
+                            Debug.Log(uv[vi]);
                             vertices[vi++] = bilerp(ref v00, ref v01, ref v11, ref v10, tx, ty);
                         }
                     }
@@ -226,7 +228,70 @@ namespace g3
             return this;
         }
 
+        // Added by sHTiF for non-uniform tesselation
+        public MeshGenerator GenerateNonUniform(int p_x, int p_y, int p_z)
+        {
+            NoSharedVertices = true;
+            p_x = p_x > 1 ? p_x : 2;
+            p_y = p_y > 1 ? p_y : 2;
+            p_z = p_z > 1 ? p_z : 2;
+            int Xm1 = p_x - 1;
+            int Ym1 = p_y - 1;
+            int Zm1 = p_z - 1;
+            vertices = new VectorArray3d(p_x * p_y * 2 + p_x * p_z * 2 + p_y * p_z * 2);
+            uv = new VectorArray2f(vertices.Count);
+            normals = new VectorArray3f(vertices.Count);
+            triangles = new IndexArray3i(2 * (Xm1 * Ym1 * 2 + Xm1 * Zm1 * 2 + Ym1 * Zm1 * 2));
+            groups = new int[triangles.Count];
 
+            Vector3d[] boxvertices = Box.ComputeVertices();
+
+            int vi = 0;
+            int ti = 0;
+            if (NoSharedVertices) {
+                for (int fi = 0; fi < 6; ++fi)
+                {
+                    int fx = fi == 2 || fi == 3 ? p_z : p_x;
+                    int fy = fi == 4 || fi == 5 ? p_z : p_y;
+                    // get corner vertices
+                    Vector3d v00 = boxvertices[gIndices.BoxFaces[fi, 0]];
+                    Vector3d v01 = boxvertices[gIndices.BoxFaces[fi, 1]];
+                    Vector3d v11 = boxvertices[gIndices.BoxFaces[fi, 2]];
+                    Vector3d v10 = boxvertices[gIndices.BoxFaces[fi, 3]];
+                    Vector3f faceN = Math.Sign(gIndices.BoxFaceNormals[fi]) *
+                                     (Vector3f) Box.Axis(Math.Abs(gIndices.BoxFaceNormals[fi]) - 1);
+
+                    // add vertex rows
+                    int start_vi = vi;
+                    for (int yi = 0; yi < fy; ++yi) {
+                        double ty = (double)yi / (double)(fy-1);
+                        for (int xi = 0; xi < fx; ++xi) {
+                            double tx = (double)xi / (double)(fx-1);
+                            normals[vi] = faceN;
+                            uv[vi] = new Vector2f(tx, ty);
+                            vertices[vi++] = bilerp(ref v00, ref v01, ref v11, ref v10, tx, ty);
+                        }
+                    }
+
+                    // add faces
+                    for (int y0 = 0; y0 < fy-1; ++y0) {
+                        for (int x0 = 0; x0 < fx-1; ++x0) {
+                            int i00 = start_vi + y0 * fx + x0;
+                            int i10 = start_vi + (y0+1) * fx + x0;
+                            int i01 = i00 + 1, i11 = i10 + 1;
+
+                            groups[ti] = fi;
+                            triangles.Set(ti++, i00, i01, i11, Clockwise);
+                            groups[ti] = fi;
+                            triangles.Set(ti++, i00, i11, i10, Clockwise);
+                        }
+                    }
+                }
+
+            }
+
+            return this;
+        }
 
     }
 
