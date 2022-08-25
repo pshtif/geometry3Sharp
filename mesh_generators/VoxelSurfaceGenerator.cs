@@ -25,6 +25,10 @@ namespace g3
 		// we start a new mesh
 		public int MaxMeshElementCount = int.MaxValue;
 
+		public float voxelSize = 1;
+		
+		public Vector3d voxelOffset = Vector3d.Zero;
+
         // result
 		public List<DMesh3> Meshes;
 
@@ -59,7 +63,7 @@ namespace g3
             foreach ( Vector3i nz in Voxels.NonZeros() ) {
 				check_counts_or_append(6, 2);
 
-                Box3d cube = Box3d.UnitZeroCentered;
+				Box3d cube = Box3d.UnitZeroCentered;
                 cube.Center = (Vector3d)nz;
 
                 for ( int fi = 0; fi < 6; ++fi ) {
@@ -81,8 +85,9 @@ namespace g3
 						vi.c = ColorSourceF(nz);
 						vi.bHaveC = true;
 					}
-                    for ( int j = 0; j < 4; ++j ) {
-                        vi.v = cube.Corner(gIndices.BoxFaces[fi, j]);
+                    for ( int j = 0; j < 4; ++j )
+                    {
+	                    vi.v = cube.Corner(gIndices.BoxFaces[fi, j]) * voxelSize + voxelOffset;
 						vertices[j] = cur_mesh.AppendVertex(vi);
                     }
 
