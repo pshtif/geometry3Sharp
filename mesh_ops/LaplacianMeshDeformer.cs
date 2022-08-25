@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Debug = UnityEngine.Debug;
 
 namespace g3
 {
@@ -22,9 +23,11 @@ namespace g3
             public Vector3d Position;
             public double Weight;
             public bool PostFix;
+            public float Custom;
         }
         Dictionary<int, SoftConstraintV> SoftConstraints = new Dictionary<int, SoftConstraintV>();
         bool HavePostFixedConstraints = false;
+        private bool HaveOnlyPostFixedConstraints = true;
 
 
         // needs to be updated after constraints
@@ -50,11 +53,24 @@ namespace g3
         }
 
 
-        public void SetConstraint(int vID, Vector3d targetPos, double weight, bool bForceToFixedPos = false)
+        public void SetConstraint(int vID, Vector3d targetPos, double weight, bool bForceToFixedPos = false, float p_custom = 0)
         {
-            SoftConstraints[vID] = new SoftConstraintV() { Position = targetPos, Weight = weight, PostFix = bForceToFixedPos };
+            SoftConstraints[vID] = new SoftConstraintV() { Position = targetPos, Weight = weight, PostFix = bForceToFixedPos, Custom = p_custom};
             HavePostFixedConstraints = HavePostFixedConstraints || bForceToFixedPos;
+            HaveOnlyPostFixedConstraints = HaveOnlyPostFixedConstraints && bForceToFixedPos;
             need_solve_update = true;
+        }
+
+        /**
+         * Added ability to get constraint
+         * sHTiF
+         */
+        public SoftConstraintV GetConstraint(int vID)
+        {
+            if (!IsConstrained(vID))
+                throw new Exception("No valid constraint found.");
+            
+            return SoftConstraints[vID];
         }
 
         public bool IsConstrained(int vID) {
@@ -65,6 +81,7 @@ namespace g3
         {
             SoftConstraints.Clear();
             HavePostFixedConstraints = false;
+            HaveOnlyPostFixedConstraints = true;
             need_solve_update = true;
         }
 
@@ -193,50 +210,65 @@ namespace g3
         // Result must be as large as Mesh.MaxVertexID
         public bool SolveMultipleCG(Vector3d[] Result)
         {
-            if (WeightsM == null)
-                Initialize();       // force initialize...
+            // Need to calculate only if there are actually some non fixed constaints - sHTiF
+            if (!HaveOnlyPostFixedConstraints)
+            {
+                if (WeightsM == null)
+                    Initialize(); // force initialize...
 
-            UpdateForSolve();
+                UpdateForSolve();
 
-            // use initial positions as initial solution. 
-            Array.Copy(Px, Sx, N);
-            Array.Copy(Py, Sy, N);
-            Array.Copy(Pz, Sz, N);
+                // use initial positions as initial solution. 
+                Array.Copy(Px, Sx, N);
+                Array.Copy(Py, Sy, N);
+                Array.Copy(Pz, Sz, N);
 
 
-            Action<double[], double[]> CombinedMultiply = (X, B) => {
-                //PackedM.Multiply(X, B);
-                PackedM.Multiply_Parallel(X, B);
+                Action<double[], double[]> CombinedMultiply = (X, B) =>
+                {
+                    //PackedM.Multiply(X, B);
+                    PackedM.Multiply_Parallel(X, B);
+
+                    for (int i = 0; i < N; ++i)
+                        B[i] += WeightsM[i, i] * X[i];
+                };
+
+                SparseSymmetricCG SolverX = new SparseSymmetricCG()
+                {
+                    B = Bx, X = Sx,
+                    MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
+                    UseXAsInitialGuess = true
+                };
+                SparseSymmetricCG SolverY = new SparseSymmetricCG()
+                {
+                    B = By, X = Sy,
+                    MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
+                    UseXAsInitialGuess = true
+                };
+                SparseSymmetricCG SolverZ = new SparseSymmetricCG()
+                {
+                    B = Bz, X = Sz,
+                    MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
+                    UseXAsInitialGuess = true
+                };
+
+                SparseSymmetricCG[] solvers = new SparseSymmetricCG[3] {SolverX, SolverY, SolverZ};
+                bool[] ok = new bool[3];
+                int[] indices = new int[3] {0, 1, 2};
+
+                // preconditioned solve is slower =\
+                //Action<int> SolveF = (i) => {  ok[i] = solvers[i].SolvePreconditioned(); };
+                Action<int> SolveF = (i) => { ok[i] = solvers[i].Solve(); };
+                gParallel.ForEach(indices, SolveF);
+
+                if (ok[0] == false || ok[1] == false || ok[2] == false)
+                    return false;
 
                 for (int i = 0; i < N; ++i)
-                    B[i] += WeightsM[i, i] * X[i];
-            };
-
-            SparseSymmetricCG SolverX = new SparseSymmetricCG() { B = Bx, X = Sx,
-                MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
-                UseXAsInitialGuess = true };
-            SparseSymmetricCG SolverY = new SparseSymmetricCG() { B = By, X = Sy,
-                MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
-                UseXAsInitialGuess = true };
-            SparseSymmetricCG SolverZ = new SparseSymmetricCG() { B = Bz, X = Sz,
-                MultiplyF = CombinedMultiply, PreconditionMultiplyF = Preconditioner.Multiply,
-                UseXAsInitialGuess = true };
-
-            SparseSymmetricCG[] solvers = new SparseSymmetricCG[3] { SolverX, SolverY, SolverZ };
-            bool[] ok = new bool[3];
-            int[] indices = new int[3] { 0, 1, 2 };
-
-            // preconditioned solve is slower =\
-            //Action<int> SolveF = (i) => {  ok[i] = solvers[i].SolvePreconditioned(); };
-            Action<int> SolveF = (i) => {  ok[i] = solvers[i].Solve(); };
-            gParallel.ForEach(indices, SolveF);
-
-            if (ok[0] == false || ok[1] == false || ok[2] == false)
-                return false;
-
-            for ( int i = 0; i < N; ++i ) {
-                int vid = ToMeshV[i];
-                Result[vid] = new Vector3d(Sx[i], Sy[i], Sz[i]);
+                {
+                    int vid = ToMeshV[i];
+                    Result[vid] = new Vector3d(Sx[i], Sy[i], Sz[i]);
+                }
             }
 
             // apply post-fixed constraints
@@ -322,8 +354,10 @@ namespace g3
         {
             int N = Mesh.MaxVertexID;
             Vector3d[] Result = new Vector3d[N];
+            
             if ( Solve(Result) == false )
                 return false;
+            
             for (int i = 0; i < N; ++i) {
                 if (Mesh.IsVertex(i)) {
                     Mesh.SetVertex(i, Result[i]);
