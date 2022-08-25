@@ -43,6 +43,8 @@ namespace g3
         Index3i GetTriangle(int i);
         int GetTriangleGroup(int i);
 
+        int GetMaterialGroup(int i);
+
         bool IsTriangle(int tID);
 
         // iterators allow us to work with gaps in index space
