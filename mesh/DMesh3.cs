@@ -110,7 +110,8 @@ namespace g3
         public static readonly Index3i InvalidTriangle = new Index3i(InvalidID, InvalidID, InvalidID);
         public static readonly Index2i InvalidEdge = new Index2i(InvalidID, InvalidID);
 
-
+        public string name;
+        
         RefCountVector vertices_refcount;
         DVector<double> vertices;
 		DVector<float> normals;
@@ -125,6 +126,8 @@ namespace g3
         DVector<int> triangles;
         DVector<int> triangle_edges;
 		DVector<int> triangle_groups;
+        
+        DVector<int> material_groups;
 
         RefCountVector edges_refcount;
         DVector<int> edges;
@@ -132,7 +135,9 @@ namespace g3
         int timestamp = 0;
         int shape_timestamp = 0;
 
-        int max_group_id = 0;
+        int max_triangle_group_id = 0;
+
+        int max_material_group_id = 0;
 
 
         /// <summary>
@@ -161,7 +166,10 @@ namespace g3
             triangles_refcount = new RefCountVector();
 			if ( bWantTriGroups )
 				triangle_groups = new DVector<int>();
-            max_group_id = 0;
+            max_triangle_group_id = 0;
+            material_groups = new DVector<int>();
+            max_material_group_id = 0;
+            
 
             edges = new DVector<int>();
             edges_refcount = new RefCountVector();
@@ -175,6 +183,8 @@ namespace g3
         // normals/colors/uvs will only be copied if they exist
         public DMesh3(DMesh3 copy, bool bCompact = false, bool bWantNormals = true, bool bWantColors = true, bool bWantUVs = true)
         {
+            name = copy.name;
+            
             if (bCompact)
                 CompactCopy(copy, bWantNormals, bWantColors, bWantUVs);
             else
@@ -218,12 +228,13 @@ namespace g3
             triangles_refcount = new RefCountVector();
             edges = new DVector<int>();
             edges_refcount = new RefCountVector();
-            max_group_id = 0;
+            max_triangle_group_id = 0;
 
             normals = (bNormals && copy.normals != null) ? new DVector<float>() : null;
             colors = (bColors && copy.colors != null) ? new DVector<float>() : null;
             uv = (bUVs && copy.uv != null) ? new DVector<float>() : null;
             triangle_groups = (copy.triangle_groups != null) ? new DVector<int>() : null;
+            material_groups = (copy.material_groups != null) ? new DVector<int>() : null;
 
             // [TODO] if we knew some of these were dense we could copy directly...
 
@@ -241,7 +252,7 @@ namespace g3
                 t.a = mapV[t.a]; t.b = mapV[t.b]; t.c = mapV[t.c];
                 int g = (copy.HasTriangleGroups) ? copy.GetTriangleGroup(tid) : InvalidID;
                 AppendTriangle(t, g);
-                max_group_id = Math.Max(max_group_id, g+1);
+                max_triangle_group_id = Math.Max(max_triangle_group_id, g+1);
             }
 
             return new CompactInfo() {
@@ -267,7 +278,9 @@ namespace g3
             triangles_refcount = new RefCountVector(copy.triangles_refcount);
             if (copy.triangle_groups != null)
                 triangle_groups = new DVector<int>(copy.triangle_groups);
-            max_group_id = copy.max_group_id;
+            max_triangle_group_id = copy.max_triangle_group_id;
+            material_groups = new DVector<int>(copy.material_groups);
+            max_material_group_id = copy.max_material_group_id;
 
             edges = new DVector<int>(copy.edges);
             edges_refcount = new RefCountVector(copy.edges_refcount);
@@ -288,12 +301,14 @@ namespace g3
             triangles_refcount = new RefCountVector();
             edges = new DVector<int>();
             edges_refcount = new RefCountVector();
-            max_group_id = 0;
+            max_triangle_group_id = 0;
 
             normals = (bNormals && copy.HasVertexNormals) ? new DVector<float>() : null;
             colors = (bColors && copy.HasVertexColors) ? new DVector<float>() : null;
             uv = (bUVs && copy.HasVertexUVs) ? new DVector<float>() : null;
             triangle_groups = (copy.HasTriangleGroups) ? new DVector<int>() : null;
+            material_groups = new DVector<int>();
+            max_material_group_id = 0;
 
 
             // [TODO] if we knew some of these were dense we could copy directly...
@@ -312,7 +327,7 @@ namespace g3
                 t.a = mapV[t.a]; t.b = mapV[t.b]; t.c = mapV[t.c];
                 int g = (copy.HasTriangleGroups) ? copy.GetTriangleGroup(tid) : InvalidID;
                 AppendTriangle(t, g);
-                max_group_id = Math.Max(max_group_id, g + 1);
+                max_triangle_group_id = Math.Max(max_triangle_group_id, g + 1);
             }
 
             return new CompactInfo() {
@@ -367,7 +382,7 @@ namespace g3
 			get { return edges_refcount.max_index; }
 		}
         public int MaxGroupID {
-            get { return max_group_id; }
+            get { return max_triangle_group_id; }
         }
 
         public bool HasVertexColors { get { return colors != null; } }
@@ -544,6 +559,7 @@ namespace g3
 				vi.uv = GetVertexUV(i);
 			} else
 				vi.bHaveUV = false;
+            
 			return vi;
 		}
 
@@ -621,8 +637,26 @@ namespace g3
                 }
             }
         }
+        
+        // Added support for material groups -sHTiF
+        public int GetMaterialGroup(int tID) { 
+            return (material_groups == null) ? -1 
+                : ( triangles_refcount.isValid(tID) ? material_groups[tID] : 0 );
+        }
 
+        public int GetMaterialGroupCount()
+        {
+            return max_material_group_id;
+        }
 
+        public void SetMaterialGroup(int tid, int group_id) {
+            if ( material_groups != null ) {
+                debug_check_is_triangle(tid);
+                material_groups[tid] = group_id;
+                max_material_group_id = Math.Max(max_material_group_id, group_id+1);
+                updateTimeStamp(false);
+            }
+        }
 
         public int GetTriangleGroup(int tID) { 
 			return (triangle_groups == null) ? -1 
@@ -633,13 +667,13 @@ namespace g3
 			if ( triangle_groups != null ) {
                 debug_check_is_triangle(tid);
                 triangle_groups[tid] = group_id;
-                max_group_id = Math.Max(max_group_id, group_id+1);
+                max_triangle_group_id = Math.Max(max_triangle_group_id, group_id+1);
                 updateTimeStamp(false);
 			}
 		}
 
         public int AllocateTriangleGroup() {
-            return ++max_group_id;
+            return ++max_triangle_group_id;
         }
 
 
@@ -984,7 +1018,7 @@ namespace g3
 				int j = 2*vid;
 				uv.insert(u[1], j + 1);
 				uv.insert(u[0], j);
-			}
+            }
 
             allocate_edges_list(vid);
 
@@ -1114,7 +1148,7 @@ namespace g3
         public int AppendTriangle(int v0, int v1, int v2, int gid = -1) {
             return AppendTriangle(new Index3i(v0, v1, v2), gid);
         }
-        public int AppendTriangle(Index3i tv, int gid = -1) {
+        public int AppendTriangle(Index3i tv, int gid = -1, int mid = 0) {
             if (IsVertex(tv[0]) == false || IsVertex(tv[1]) == false || IsVertex(tv[2]) == false) {
                 Util.gDevAssert(false);
                 return InvalidID;
@@ -1130,8 +1164,10 @@ namespace g3
             int e1 = find_edge(tv[1], tv[2]);
             int e2 = find_edge(tv[2], tv[0]);
             if ((e0 != InvalidID && IsBoundaryEdge(e0) == false)
-                 || (e1 != InvalidID && IsBoundaryEdge(e1) == false)
-                 || (e2 != InvalidID && IsBoundaryEdge(e2) == false)) {
+                || (e1 != InvalidID && IsBoundaryEdge(e1) == false)
+                || (e2 != InvalidID && IsBoundaryEdge(e2) == false)) {
+                UnityEngine.Debug.Log(tv);
+                //UnityEngine.Debug.Log(edges[4 * e0 + 3]);
                 return NonManifoldID;
             }
 
@@ -1143,8 +1179,10 @@ namespace g3
             triangles.insert(tv[0], i);
             if (triangle_groups != null) {
                 triangle_groups.insert(gid, tid);
-                max_group_id = Math.Max(max_group_id, gid+1);
+                max_triangle_group_id = Math.Max(max_triangle_group_id, gid+1);
             }
+            material_groups.insert(mid, tid);
+            max_material_group_id = Math.Max(max_material_group_id, mid+1);
 
             // increment ref counts and update/create edges
             vertices_refcount.increment(tv[0]);
@@ -1177,7 +1215,7 @@ namespace g3
         /// If bUnsafe, we use fast id allocation that does not update free list.
         /// You should only be using this between BeginUnsafeTrianglesInsert() / EndUnsafeTrianglesInsert() calls
         /// </summary>
-        public MeshResult InsertTriangle(int tid, Index3i tv, int gid = -1, bool bUnsafe = false)
+        public MeshResult InsertTriangle(int tid, Index3i tv, int gid = -1, bool bUnsafe = false, int mid = 0)
         {
             if (triangles_refcount.isValid(tid))
                 return MeshResult.Failed_TriangleAlreadyExists;
@@ -1214,8 +1252,11 @@ namespace g3
             triangles.insert(tv[0], i);
             if (triangle_groups != null) {
                 triangle_groups.insert(gid, tid);
-                max_group_id = Math.Max(max_group_id, gid + 1);
+                max_triangle_group_id = Math.Max(max_triangle_group_id, gid + 1);
             }
+            
+            material_groups.insert(mid, tid);
+            max_material_group_id = Math.Max(max_material_group_id, mid + 1);
 
             // increment ref counts and update/create edges
             vertices_refcount.increment(tv[0]);
@@ -1304,11 +1345,11 @@ namespace g3
             triangle_groups.resize(NT);
             for (int i = 0; i < NT; ++i)
                 triangle_groups[i] = initial_group;
-            max_group_id = 0;
+            max_triangle_group_id = 0;
         }
         public void DiscardTriangleGroups() {
             triangle_groups = null;
-            max_group_id = 0;
+            max_triangle_group_id = 0;
         }
 
 
@@ -1747,7 +1788,7 @@ namespace g3
 
 
 
-        int find_edge(int vA, int vB)
+        public int find_edge(int vA, int vB)
         {
             // [RMS] edge vertices must be sorted (min,max),
             //   that means we only need one index-check in inner loop.
@@ -2178,6 +2219,12 @@ namespace g3
             set { triangle_groups = value; }
         }
 
+        public DVector<int> MaterialGroupsBuffer
+        {
+            get { return material_groups; }
+            set { material_groups = value; }
+        }
+
         public DVector<int> EdgesBuffer{
             get { return edges; }
             set { edges = value; }
@@ -2248,7 +2295,7 @@ namespace g3
 
             // iterate over triangles and increment vtx refcount for each tri
             bool has_groups = HasTriangleGroups;
-            max_group_id = 0;
+            max_triangle_group_id = 0;
             for ( int tid = 0; tid < MaxTID; ++tid ) {
                 if (triangles_refcount.isValid(tid) == false)
                     continue;
@@ -2258,9 +2305,12 @@ namespace g3
                 vertices_refcount.increment(c);
 
                 if (has_groups)
-                    max_group_id = Math.Max(max_group_id, triangle_groups[tid]);
+                    max_triangle_group_id = Math.Max(max_triangle_group_id, triangle_groups[tid]);
+                
+                max_material_group_id = Math.Max(max_material_group_id, material_groups[tid]);
             }
-            max_group_id++;
+            max_triangle_group_id++;
+            max_material_group_id++;
 
             vertices_refcount.rebuild_free_list();
             triangles_refcount.rebuild_free_list();
