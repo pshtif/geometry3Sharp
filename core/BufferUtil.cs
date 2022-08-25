@@ -206,6 +206,12 @@ namespace g3
                 foreach (Vector3d v in valuesvd)
                     result[k++] = v;
 
+            } else if (t == typeof(Vector2d)) {
+                result = new Vector3d[N];
+                IEnumerable<Vector2d> valuesvd = values as IEnumerable<Vector2d>;
+                foreach (Vector2d v in valuesvd)
+                    result[k++] = new Vector3d(v.x, 0, v.y);
+
             } else
                 throw new NotSupportedException("ToVector3d: unknown type " + t.ToString());
 
